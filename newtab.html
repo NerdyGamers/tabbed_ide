@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tabbed IDE</title>
+  <!-- Highlight.js for syntax highlighting (loaded from extension bundle) -->
+  <link rel="stylesheet" href="libs/atom-one-dark.min.css" />
+  <link rel="stylesheet" href="newtab.css" />
+</head>
+<body>
+
+  <!-- ================================================================
+    HEADER BAR
+    Shows provider selector, auth status badge, and theme toggle.
+  ================================================================ -->
+  <header class="app-header">
+    <div class="header-left">
+      <span class="logo">&#9881; Tabbed IDE</span>
+    </div>
+    <div class="header-center">
+      <!-- Provider selector -->
+      <label for="provider-select" class="visually-hidden">AI Provider</label>
+      <select id="provider-select" class="provider-select" title="Select AI Provider">
+        <option value="gemini">&#x2728; Gemini</option>
+        <option value="perplexity">&#x1F300; Perplexity</option>
+      </select>
+      <!-- Auth status indicator -->
+      <span id="auth-badge" class="auth-badge auth-unknown" title="Authentication status">
+        <span class="auth-dot"></span>
+        <span id="auth-label">Checking...</span>
+      </span>
+    </div>
+    <div class="header-right">
+      <button id="theme-toggle" class="icon-btn" title="Toggle light/dark theme">&#9790;</button>
+      <button id="clear-btn" class="icon-btn" title="Clear conversation">&#128465;</button>
+    </div>
+  </header>
+
+  <!-- ================================================================
+    MAIN SPLIT-SCREEN LAYOUT
+    Left pane: AI Chat | Drag handle | Right pane: Code IDE
+  ================================================================ -->
+  <main class="app-body">
+
+    <!-- LEFT PANE: Chat -->
+    <section id="chat-container" class="pane pane-chat" aria-label="AI Chat">
+      <div class="pane-header">
+        <span class="pane-title">&#128172; Chat</span>
+        <span id="chat-status" class="pane-status"></span>
+      </div>
+
+      <!-- Message list -->
+      <div id="message-list" class="message-list" role="log" aria-live="polite"></div>
+
+      <!-- Typing indicator (hidden by default) -->
+      <div id="typing-indicator" class="typing-indicator hidden">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="typing-label">AI is thinking...</span>
+      </div>
+
+      <!-- Input area -->
+      <div class="chat-input-area">
+        <textarea
+          id="chat-input"
+          class="chat-input"
+          placeholder="Describe what you want to build... (Shift+Enter for newline, Enter to send)"
+          rows="3"
+          aria-label="Chat input"
+        ></textarea>
+        <button id="send-btn" class="send-btn" title="Send message (Enter)">
+          &#9658; Send
+        </button>
+      </div>
+    </section>
+
+    <!-- DRAG HANDLE -->
+    <div
+      id="drag-handle"
+      class="drag-handle"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize panes"
+      tabindex="0"
+      title="Drag to resize panes"
+    ></div>
+
+    <!-- RIGHT PANE: Code IDE -->
+    <section id="ide-container" class="pane pane-ide" aria-label="Code IDE">
+      <div class="pane-header">
+        <span class="pane-title">&#128187; Code IDE</span>
+        <div class="ide-header-actions">
+          <span id="lang-badge" class="lang-badge">plaintext</span>
+          <button id="edit-toggle-btn" class="icon-btn" title="Toggle edit mode">&#9998; Edit</button>
+          <button id="copy-btn" class="icon-btn" title="Copy code">&#128203; Copy</button>
+          <button id="download-btn" class="icon-btn" title="Download file">&#11015; Download</button>
+        </div>
+      </div>
+
+      <!-- Code display (syntax highlighted) -->
+      <div id="code-display" class="code-display">
+        <pre id="code-pre"><code id="code-block" class="hljs">// Your generated code will appear here.
+// Start a conversation in the chat pane on the left.</code></pre>
+      </div>
+
+      <!-- Edit mode textarea (hidden by default) -->
+      <textarea
+        id="code-editor"
+        class="code-editor hidden"
+        spellcheck="false"
+        aria-label="Code editor"
+        placeholder="Edit your code here..."
+      ></textarea>
+
+      <!-- Footer stats -->
+      <div class="ide-footer">
+        <span id="code-stats">0 lines | 0 chars</span>
+        <span id="copy-feedback" class="copy-feedback hidden">Copied!</span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Highlight.js core -->
+  <script src="libs/highlight.min.js"></script>
+  <!-- Tabbed IDE frontend controller -->
+  <script src="newtab.js" type="module"></script>
+
+</body>
+</html>
