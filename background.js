@@ -1,6 +1,7 @@
 // =============================================================================
 // background.js - Tabbed IDE Service Worker (MV3)
-// Handles cookie harvesting, LLM API calls, and response parsing.
+// Handles cookie harvesting, LLM API calls, response parsing,
+// and toolbar icon click -> open/focus ide.html in its own tab.
 // Cookies are used transiently and NEVER stored in chrome.storage or logs.
 // =============================================================================
 
@@ -23,6 +24,28 @@ const PROVIDERS = {
     requiredCookies: ['__Secure-next-auth.session-token', 'next-auth.session-token', 'pplx-token'],
   },
 };
+
+// ---------------------------------------------------------------------------
+// Action Click Handler
+// Opens ide.html in its own tab, or focuses it if already open.
+// This replaces the old chrome_url_overrides newtab approach.
+// ---------------------------------------------------------------------------
+const IDE_URL = chrome.runtime.getURL('ide.html');
+
+chrome.action.onClicked.addListener(async () => {
+  // Search all tabs for an already-open ide.html
+  const existingTabs = await chrome.tabs.query({ url: IDE_URL });
+
+  if (existingTabs.length > 0) {
+    // IDE is already open — focus that tab and its window
+    const tab = existingTabs[0];
+    await chrome.windows.update(tab.windowId, { focused: true });
+    await chrome.tabs.update(tab.id, { active: true });
+  } else {
+    // Not open yet — create a new tab
+    await chrome.tabs.create({ url: IDE_URL });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Cookie Harvesting
@@ -66,7 +89,6 @@ async function askGemini(userMessage, conversationHistory) {
     throw new Error('Not authenticated with Gemini. Please visit gemini.google.com and sign in.');
   }
 
-  // Build the nested f.req JSON structure matching Gemini web client
   const reqData = [
     null,
     JSON.stringify([
@@ -78,16 +100,16 @@ async function askGemini(userMessage, conversationHistory) {
 
   const body = new URLSearchParams({
     'f.req': JSON.stringify(reqData),
-    'at': '', // CSRF token placeholder; Gemini web app sends this dynamically
+    'at': '',
   });
 
-  const cookieHeader = buildCookieHeader(cookieMap); // map cleared here
+  const cookieHeader = buildCookieHeader(cookieMap);
 
   let response;
   try {
     response = await fetch(PROVIDERS.gemini.endpoint, {
       method: 'POST',
-      credentials: 'omit', // Never use browser jar; we inject manually
+      credentials: 'omit', // Never use browser jar; cookies injected manually
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
         'Cookie': cookieHeader,
@@ -99,7 +121,7 @@ async function askGemini(userMessage, conversationHistory) {
       body: body.toString(),
     });
   } finally {
-    // cookieHeader string goes out of scope after this block
+    // cookieHeader string goes out of scope
   }
 
   if (!response.ok) {
@@ -113,8 +135,6 @@ async function askGemini(userMessage, conversationHistory) {
 // Parse Gemini's chunked protobuf-JSON stream format
 function parseGeminiStream(rawText) {
   try {
-    // Gemini returns multiple JSON arrays separated by newlines
-    // The text response is at path [4][0][1][0] in the outer array
     const lines = rawText.split('\n').filter(l => l.trim().startsWith('['));
 
     for (const line of lines) {
@@ -129,7 +149,6 @@ function parseGeminiStream(rawText) {
       }
     }
 
-    // Fallback: try to find any substantial string in the response
     const match = rawText.match(/"([^"]{50,}?)"/);
     return match ? match[1] : 'Received a response but could not parse it. Check your Gemini session.';
   } catch (err) {
@@ -147,9 +166,9 @@ async function askPerplexity(userMessage, conversationHistory) {
     throw new Error('Not authenticated with Perplexity. Please visit perplexity.ai and sign in.');
   }
 
-  const cookieHeader = buildCookieHeader(cookieMap); // map cleared here
+  const cookieHeader = buildCookieHeader(cookieMap);
 
-  // Step 1: Fetch CSRF token from session endpoint
+  // Step 1: Fetch CSRF token
   let pplxToken = '';
   try {
     const sessionRes = await fetch(PROVIDERS.perplexity.sessionEndpoint, {
@@ -162,7 +181,7 @@ async function askPerplexity(userMessage, conversationHistory) {
     const sessionData = await sessionRes.json();
     pplxToken = sessionData?.user?.pplxToken || '';
   } catch (_) {
-    // Proceed without CSRF token; some endpoints don't require it
+    // Proceed without CSRF token
   }
 
   // Step 2: POST to SSE ask endpoint
@@ -217,29 +236,24 @@ function parsePerplexitySSE(rawText) {
 }
 
 // ---------------------------------------------------------------------------
-// Response Parser: Splits prose from code blocks
-// Returns { chat: string, codeBlocks: [{lang, code}], primaryCode: {lang, code}|null }
+// Response Parser
+// Splits prose from fenced code blocks.
+// Returns { chat, codeBlocks: [{lang, code}], primaryCode }
 // ---------------------------------------------------------------------------
 function parseResponse(fullText) {
   const codeBlocks = [];
   const codeRegex = /```([\w]*)?\n([\s\S]*?)```/g;
   let match;
-  let chatText = fullText;
 
-  // Extract all fenced code blocks
   while ((match = codeRegex.exec(fullText)) !== null) {
     const lang = (match[1] || 'plaintext').trim();
     const code = match[2].trim();
-    if (code.length > 0) {
-      codeBlocks.push({ lang, code });
-    }
+    if (code.length > 0) codeBlocks.push({ lang, code });
   }
 
-  // Remove code blocks from chat text, normalize whitespace
-  chatText = fullText.replace(/```[\w]*\n[\s\S]*?```/g, '').trim();
-  chatText = chatText.replace(/\n{3,}/g, '\n\n'); // Collapse excess blank lines
+  let chatText = fullText.replace(/```[\w]*\n[\s\S]*?```/g, '').trim();
+  chatText = chatText.replace(/\n{3,}/g, '\n\n');
 
-  // Pick the largest code block as the primary IDE content
   const primaryCode = codeBlocks.length > 0
     ? codeBlocks.reduce((a, b) => a.code.length >= b.code.length ? a : b)
     : null;
@@ -258,7 +272,7 @@ async function checkAuth(provider) {
 }
 
 // ---------------------------------------------------------------------------
-// Message Router (from newtab.js)
+// Message Router (from ide.html / newtab.js)
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Validate sender is our own extension
@@ -273,12 +287,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     checkAuth(payload.provider)
       .then(isAuthed => sendResponse({ success: true, isAuthed }))
       .catch(err => sendResponse({ success: false, error: err.message }));
-    return true; // Keep channel open for async
+    return true;
   }
 
   if (type === 'ASK_LLM') {
     const { provider, userMessage, conversationHistory } = payload;
-
     const askFn = provider === 'gemini' ? askGemini : askPerplexity;
 
     askFn(userMessage, conversationHistory || [])
@@ -291,7 +304,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: err.message });
       });
 
-    return true; // Keep channel open for async response
+    return true;
   }
 
   return false;
