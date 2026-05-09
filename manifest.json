@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Tabbed IDE",
   "version": "1.0.0",
-  "description": "Split-screen AI Coding IDE on every New Tab. Chat with Gemini or Perplexity on the left, get syntax-highlighted code on the right.",
+  "description": "Split-screen AI Coding IDE. Chat with Gemini or Perplexity on the left, get syntax-highlighted code on the right. Click the toolbar icon to open.",
   "author": "NerdyGamers",
 
   "permissions": [
@@ -27,8 +27,13 @@
     "type": "module"
   },
 
-  "chrome_url_overrides": {
-    "newtab": "newtab.html"
+  "action": {
+    "default_title": "Open Tabbed IDE",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
 
   "declarative_net_request": {
@@ -51,8 +56,10 @@
     "128": "icons/icon128.png"
   },
 
-  "action": {
-    "default_popup": "newtab.html",
-    "default_title": "Tabbed IDE"
-  }
+  "web_accessible_resources": [
+    {
+      "resources": ["ide.html", "newtab.css", "newtab.js", "libs/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
